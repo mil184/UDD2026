@@ -1,7 +1,6 @@
 package com.example.ddmdemo.service.impl;
 
 import ai.djl.translate.TranslateException;
-import com.example.ddmdemo.dto.IndexDocumentResponseDTO;
 import com.example.ddmdemo.exceptionhandling.exception.LoadingException;
 import com.example.ddmdemo.exceptionhandling.exception.StorageException;
 import com.example.ddmdemo.indexmodel.DummyIndex;
@@ -73,7 +72,8 @@ public class IndexingServiceImpl implements IndexingService {
         var serverFilename = fileService.store(documentFile, UUID.randomUUID().toString());
         newIndex.setServerFilename(serverFilename);
         newEntity.setServerFilename(serverFilename);
-
+        analysis.setFileName(serverFilename);
+        
         // Mime type + save entity
         newEntity.setMimeType(detectMimeType(documentFile));
         var savedEntity = dummyRepository.save(newEntity);
