@@ -9,6 +9,7 @@ import com.example.ddmdemo.model.DummyTable;
 import com.example.ddmdemo.respository.DummyRepository;
 import com.example.ddmdemo.service.interfaces.FileService;
 import com.example.ddmdemo.service.interfaces.IndexingService;
+import com.example.ddmdemo.util.MalwareAnalysisParser;
 import com.example.ddmdemo.util.VectorizationUtil;
 import jakarta.transaction.Transactional;
 import java.io.IOException;
@@ -38,6 +39,8 @@ public class IndexingServiceImpl implements IndexingService {
 
     private final LanguageDetector languageDetector;
 
+    private final MalwareAnalysisParser malwareAnalysisParser;
+
 
     @Override
     @Transactional
@@ -49,7 +52,24 @@ public class IndexingServiceImpl implements IndexingService {
         newIndex.setTitle(title);
         newEntity.setTitle(title);
 
+        // 1) Extract text
         var documentContent = extractDocumentContent(documentFile);
+
+        // 2) Parse malware analysis fields
+        var analysis = malwareAnalysisParser.parse(documentContent);
+        log.info("Parsed MalwareAnalysis from report '{}': {}", title, analysis);
+
+        // If you want: store parsed fields (requires adding fields in DummyTable/DummyIndex)
+        // newEntity.setAnalystFullName(analysis.getAnalystFullName());
+        // newEntity.setSecurityOrganization(analysis.getSecurityOrganization());
+        // newEntity.setMalwareName(analysis.getMalwareName());
+        // newEntity.setBehaviorDescription(analysis.getBehaviorDescription());
+        // newEntity.setThreatClassification(
+        //     analysis.getThreatClassification() != null ? analysis.getThreatClassification().name() : null
+        // );
+        // newEntity.setSampleHash(analysis.getSampleHash());
+
+        // Keep your existing SR/EN logic
         if (detectLanguage(documentContent).equals("SR")) {
             newIndex.setContentSr(documentContent);
         } else {
@@ -57,26 +77,29 @@ public class IndexingServiceImpl implements IndexingService {
         }
         newEntity.setContent(documentContent);
 
+        // Store file
         var serverFilename = fileService.store(documentFile, UUID.randomUUID().toString());
         newIndex.setServerFilename(serverFilename);
         newEntity.setServerFilename(serverFilename);
 
+        // Mime type + save entity
         newEntity.setMimeType(detectMimeType(documentFile));
         var savedEntity = dummyRepository.save(newEntity);
 
+        // Vectorize
         try {
             newIndex.setVectorizedContent(VectorizationUtil.getEmbedding(title));
         } catch (TranslateException e) {
-            log.error("Could not calculate vector representation for document with ID: {}",
-                savedEntity.getId());
+            log.error("Could not calculate vector representation for document with ID: {}", savedEntity.getId(), e);
         }
+
         newIndex.setDatabaseId(savedEntity.getId());
         dummyIndexRepository.save(newIndex);
 
         return serverFilename;
     }
 
-    private String extractDocumentContent(MultipartFile multipartPdfFile) {
+    private String extractDocumentContent1(MultipartFile multipartPdfFile) {
         String documentContent;
         try (var pdfFile = multipartPdfFile.getInputStream()) {
             var pdDocument = PDDocument.load(pdfFile);
@@ -88,6 +111,40 @@ public class IndexingServiceImpl implements IndexingService {
         }
 
         return documentContent;
+    }
+
+    private String extractDocumentContent(MultipartFile multipartPdfFile) {
+        if (multipartPdfFile == null || multipartPdfFile.isEmpty()) {
+            throw new LoadingException("PDF file is missing or empty.");
+        }
+
+        try (var pdfStream = multipartPdfFile.getInputStream();
+             var pdDocument = PDDocument.load(pdfStream)) {
+
+            // Optional: remove this if you expect encrypted PDFs and handle them differently
+            if (pdDocument.isEncrypted()) {
+                throw new LoadingException("PDF file is encrypted and cannot be parsed.");
+            }
+
+            var stripper = new PDFTextStripper();
+
+            // Keep reading order more natural for many reports
+            stripper.setSortByPosition(true);
+
+            // Optional: if you want all pages explicitly
+            stripper.setStartPage(1);
+            stripper.setEndPage(pdDocument.getNumberOfPages());
+
+            var text = stripper.getText(pdDocument);
+
+            if (text == null || text.isBlank()) {
+                throw new LoadingException("PDF file contains no extractable text.");
+            }
+
+            return text.trim();
+        } catch (IOException e) {
+            throw new LoadingException("Error while trying to load PDF file content.");
+        }
     }
 
     private String detectLanguage(String text) {
