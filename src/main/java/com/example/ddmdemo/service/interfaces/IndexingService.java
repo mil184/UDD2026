@@ -8,4 +8,6 @@ import org.springframework.web.multipart.MultipartFile;
 public interface IndexingService {
 
     MalwareAnalysis indexDocument(MultipartFile documentFile);
+
+    MalwareAnalysis confirmAndIndex(MalwareAnalysis analysis);
 }

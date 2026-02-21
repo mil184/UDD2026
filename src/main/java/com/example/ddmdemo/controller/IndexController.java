@@ -6,11 +6,7 @@ import com.example.ddmdemo.model.MalwareAnalysis;
 import com.example.ddmdemo.service.interfaces.IndexingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/index")
@@ -23,5 +19,11 @@ public class IndexController {
     @ResponseStatus(HttpStatus.CREATED)
     public MalwareAnalysis addDocumentFile(@ModelAttribute DummyDocumentFileDTO documentFile) {
         return indexingService.indexDocument(documentFile.file());
+    }
+
+    @PostMapping("/confirm")
+    @ResponseStatus(HttpStatus.CREATED)
+    public MalwareAnalysis confirmAndIndex(@RequestBody MalwareAnalysis analysis) {
+        return indexingService.confirmAndIndex(analysis);
     }
 }

@@ -4,10 +4,12 @@ import ai.djl.translate.TranslateException;
 import com.example.ddmdemo.exceptionhandling.exception.LoadingException;
 import com.example.ddmdemo.exceptionhandling.exception.StorageException;
 import com.example.ddmdemo.indexmodel.DummyIndex;
+import com.example.ddmdemo.indexmodel.MalwareAnalysisIndex;
 import com.example.ddmdemo.indexrepository.DummyIndexRepository;
 import com.example.ddmdemo.model.DummyTable;
 import com.example.ddmdemo.model.MalwareAnalysis;
 import com.example.ddmdemo.respository.DummyRepository;
+import com.example.ddmdemo.indexrepository.MalwareAnalysisIndexRepository;
 import com.example.ddmdemo.service.interfaces.FileService;
 import com.example.ddmdemo.service.interfaces.IndexingService;
 import com.example.ddmdemo.util.MalwareAnalysisParser;
@@ -42,6 +44,7 @@ public class IndexingServiceImpl implements IndexingService {
 
     private final MalwareAnalysisParser malwareAnalysisParser;
 
+    private final MalwareAnalysisIndexRepository malwareAnalysisIndexRepository;
 
     @Override
     @Transactional
@@ -73,7 +76,7 @@ public class IndexingServiceImpl implements IndexingService {
         newIndex.setServerFilename(serverFilename);
         newEntity.setServerFilename(serverFilename);
         analysis.setFileName(serverFilename);
-        
+
         // Mime type + save entity
         newEntity.setMimeType(detectMimeType(documentFile));
         var savedEntity = dummyRepository.save(newEntity);
@@ -153,5 +156,33 @@ public class IndexingServiceImpl implements IndexingService {
         }
 
         return trueMimeType;
+    }
+
+    @Override
+    @Transactional
+    public MalwareAnalysis confirmAndIndex(MalwareAnalysis analysis) {
+        if (analysis == null) {
+            throw new IllegalArgumentException("MalwareAnalysis body is missing.");
+        }
+        if (analysis.getFileName() == null || analysis.getFileName().isBlank()) {
+            throw new IllegalArgumentException("fileName is required (server filename).");
+        }
+
+        var indexDoc = MalwareAnalysisIndex.builder()
+                .id(analysis.getFileName())
+                .fileName(analysis.getFileName())
+                .analystFullName(analysis.getAnalystFullName())
+                .securityOrganization(analysis.getSecurityOrganization())
+                .malwareName(analysis.getMalwareName())
+                .behaviorDescription(analysis.getBehaviorDescription())
+                .threatClassification(
+                        analysis.getThreatClassification() != null ? analysis.getThreatClassification().name() : null
+                )
+                .sampleHash(analysis.getSampleHash())
+                .build();
+
+        malwareAnalysisIndexRepository.save(indexDoc);
+
+        return analysis;
     }
 }
