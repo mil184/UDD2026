@@ -1,11 +1,13 @@
 package com.example.ddmdemo.service.impl;
 
 import ai.djl.translate.TranslateException;
+import com.example.ddmdemo.dto.IndexDocumentResponseDTO;
 import com.example.ddmdemo.exceptionhandling.exception.LoadingException;
 import com.example.ddmdemo.exceptionhandling.exception.StorageException;
 import com.example.ddmdemo.indexmodel.DummyIndex;
 import com.example.ddmdemo.indexrepository.DummyIndexRepository;
 import com.example.ddmdemo.model.DummyTable;
+import com.example.ddmdemo.model.MalwareAnalysis;
 import com.example.ddmdemo.respository.DummyRepository;
 import com.example.ddmdemo.service.interfaces.FileService;
 import com.example.ddmdemo.service.interfaces.IndexingService;
@@ -44,7 +46,7 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     @Transactional
-    public String indexDocument(MultipartFile documentFile) {
+    public MalwareAnalysis indexDocument(MultipartFile documentFile) {
         var newEntity = new DummyTable();
         var newIndex = new DummyIndex();
 
@@ -59,17 +61,7 @@ public class IndexingServiceImpl implements IndexingService {
         var analysis = malwareAnalysisParser.parse(documentContent);
         log.info("Parsed MalwareAnalysis from report '{}': {}", title, analysis);
 
-        // If you want: store parsed fields (requires adding fields in DummyTable/DummyIndex)
-        // newEntity.setAnalystFullName(analysis.getAnalystFullName());
-        // newEntity.setSecurityOrganization(analysis.getSecurityOrganization());
-        // newEntity.setMalwareName(analysis.getMalwareName());
-        // newEntity.setBehaviorDescription(analysis.getBehaviorDescription());
-        // newEntity.setThreatClassification(
-        //     analysis.getThreatClassification() != null ? analysis.getThreatClassification().name() : null
-        // );
-        // newEntity.setSampleHash(analysis.getSampleHash());
-
-        // Keep your existing SR/EN logic
+        // Keep SR/EN logic
         if (detectLanguage(documentContent).equals("SR")) {
             newIndex.setContentSr(documentContent);
         } else {
@@ -96,21 +88,7 @@ public class IndexingServiceImpl implements IndexingService {
         newIndex.setDatabaseId(savedEntity.getId());
         dummyIndexRepository.save(newIndex);
 
-        return serverFilename;
-    }
-
-    private String extractDocumentContent1(MultipartFile multipartPdfFile) {
-        String documentContent;
-        try (var pdfFile = multipartPdfFile.getInputStream()) {
-            var pdDocument = PDDocument.load(pdfFile);
-            var textStripper = new PDFTextStripper();
-            documentContent = textStripper.getText(pdDocument);
-            pdDocument.close();
-        } catch (IOException e) {
-            throw new LoadingException("Error while trying to load PDF file content.");
-        }
-
-        return documentContent;
+        return analysis;
     }
 
     private String extractDocumentContent(MultipartFile multipartPdfFile) {
