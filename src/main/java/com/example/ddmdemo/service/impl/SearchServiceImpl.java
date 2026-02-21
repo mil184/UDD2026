@@ -6,6 +6,7 @@ import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import com.example.ddmdemo.exceptionhandling.exception.MalformedQueryException;
 import com.example.ddmdemo.indexmodel.DummyIndex;
+import com.example.ddmdemo.indexmodel.MalwareAnalysisIndex;
 import com.example.ddmdemo.service.interfaces.SearchService;
 import com.example.ddmdemo.util.VectorizationUtil;
 import java.util.Arrays;
@@ -192,5 +193,81 @@ public class SearchServiceImpl implements SearchService {
         var searchHitsPaged = SearchHitSupport.searchPageFor(searchHits, searchQuery.getPageable());
 
         return (Page<DummyIndex>) SearchHitSupport.unwrapSearchHits(searchHitsPaged);
+    }
+
+    public Page<MalwareAnalysisIndex> searchReports(String q, Pageable pageable) {
+        if (q == null || q.isBlank()) {
+            return Page.empty(pageable);
+        }
+
+        String queryText = q.trim();
+
+        NativeQuery searchQuery = new NativeQueryBuilder()
+                .withQuery(buildSingleBarQuery(queryText))
+                .withPageable(pageable)
+                .build();
+
+        return runMalwareQuery(searchQuery);
+    }
+
+    private Query buildSingleBarQuery(String q) {
+        String lowered = q.toLowerCase().trim();
+
+        return BoolQuery.of(b -> {
+            // 1) Analyst full name
+            b.should(s -> s.matchPhrase(mp -> mp.field("analystFullName").query(q).boost(3.0f)));
+            b.should(s -> s.match(m -> m.field("analystFullName")
+                    .query(q)
+                    .fuzziness(Fuzziness.ONE.asString())
+                    .boost(2.0f)
+            ));
+
+            // 2) Hash
+            b.should(s -> s.term(t -> t.field("sampleHash").value(q).boost(5.0f)));
+            b.should(s -> s.term(t -> t.field("sampleHash").value(lowered).boost(5.0f)));
+
+            // 3) Threat classification
+            b.should(s -> s.term(t -> t.field("threatClassification").value(q).boost(4.0f)));
+            b.should(s -> s.term(t -> t.field("threatClassification").value(lowered).boost(4.0f)));
+            b.should(s -> s.match(m -> m.field("threatClassification").query(q).boost(1.5f)));
+
+            // 4) CERT/CSIRT organization name: match + phrase + (optional) exact term
+            b.should(s -> s.matchPhrase(mp -> mp.field("securityOrganization").query(q).boost(2.5f)));
+            b.should(s -> s.match(m -> m.field("securityOrganization")
+                    .query(q)
+                    .fuzziness(Fuzziness.ONE.asString())
+                    .boost(2.0f)
+            ));
+            b.should(s -> s.term(t -> t.field("securityOrganization").value(q).boost(3.0f)));
+            b.should(s -> s.term(t -> t.field("securityOrganization").value(lowered).boost(3.0f)));
+
+            // 5) Malware/threat name: match + phrase + (optional) exact term
+            b.should(s -> s.matchPhrase(mp -> mp.field("malwareName").query(q).boost(2.5f)));
+            b.should(s -> s.match(m -> m.field("malwareName")
+                    .query(q)
+                    .fuzziness(Fuzziness.ONE.asString())
+                    .boost(2.0f)
+            ));
+            b.should(s -> s.term(t -> t.field("malwareName").value(q).boost(3.0f)));
+            b.should(s -> s.term(t -> t.field("malwareName").value(lowered).boost(3.0f)));
+
+            // 6) Full-text search in report description (PDF extracted text)
+            b.should(s -> s.match(m -> m.field("behaviorDescription").query(q).boost(1.0f)));
+            b.should(s -> s.matchPhrase(mp -> mp.field("behaviorDescription").query(q).boost(1.5f)));
+
+            b.minimumShouldMatch("1");
+            return b;
+        })._toQuery();
+    }
+
+    private Page<MalwareAnalysisIndex> runMalwareQuery(NativeQuery searchQuery) {
+        var hits = elasticsearchTemplate.search(
+                searchQuery,
+                MalwareAnalysisIndex.class,
+                IndexCoordinates.of("malware_analysis")
+        );
+
+        var paged = SearchHitSupport.searchPageFor(hits, searchQuery.getPageable());
+        return (Page<MalwareAnalysisIndex>) SearchHitSupport.unwrapSearchHits(paged);
     }
 }
