@@ -9,6 +9,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -20,6 +21,8 @@ public class AuthController {
     PasswordEncoder encoder;
     @Autowired
     JwtUtil jwtUtils;
+
+    @CrossOrigin(origins = "http://localhost:4200")
     @PostMapping("/signin")
     public String authenticateUser(@RequestBody User user) {
         Authentication authentication = authenticationManager.authenticate(
@@ -31,6 +34,8 @@ public class AuthController {
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         return jwtUtils.generateToken(userDetails.getUsername());
     }
+
+    @CrossOrigin(origins = "http://localhost:4200")
     @PostMapping("/signup")
     public String registerUser(@RequestBody User user) {
         if (userRepository.existsByUsername(user.getUsername())) {
