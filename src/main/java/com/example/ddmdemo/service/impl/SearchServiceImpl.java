@@ -211,49 +211,100 @@ public class SearchServiceImpl implements SearchService {
     }
 
     private Query buildSingleBarQuery(String q) {
-        String lowered = q.toLowerCase().trim();
+        if (q == null) {
+            throw new MalformedQueryException("Query is null.");
+        }
 
+        String raw = q.trim();
+        if (raw.isEmpty()) {
+            throw new MalformedQueryException("Query is empty.");
+        }
+
+        boolean isPhrase = raw.length() >= 2 && raw.startsWith("'") && raw.endsWith("'");
+
+        // value without quotes if phrase
+        String phraseValue = isPhrase ? raw.substring(1, raw.length() - 1).trim() : raw;
+        if (phraseValue.isEmpty()) {
+            throw new MalformedQueryException("Phrase query is empty.");
+        }
+
+        String lowered = phraseValue.toLowerCase().trim();
+
+        // Phrase mode: NO fuzziness etc
+        if (isPhrase) {
+            return BoolQuery.of(b -> {
+                // 1) Analyst full name (phrase only)
+                b.should(s -> s.matchPhrase(mp -> mp.field("analystFullName").query(phraseValue).boost(3.0f)));
+
+                // 2) Hash (term only)
+                b.should(s -> s.term(t -> t.field("sampleHash").value(phraseValue).boost(5.0f)));
+                b.should(s -> s.term(t -> t.field("sampleHash").value(lowered).boost(5.0f)));
+
+                // 3) Threat classification (term + optional phrase-as-matchPhrase)
+                b.should(s -> s.term(t -> t.field("threatClassification").value(phraseValue).boost(4.0f)));
+                b.should(s -> s.term(t -> t.field("threatClassification").value(lowered).boost(4.0f)));
+                b.should(s -> s.matchPhrase(mp -> mp.field("threatClassification").query(phraseValue).boost(1.5f)));
+
+                // 4) Organization (phrase only)
+                b.should(s -> s.matchPhrase(mp -> mp.field("securityOrganization").query(phraseValue).boost(2.5f)));
+                b.should(s -> s.term(t -> t.field("securityOrganization").value(phraseValue).boost(3.0f)));
+                b.should(s -> s.term(t -> t.field("securityOrganization").value(lowered).boost(3.0f)));
+
+                // 5) Malware name (phrase only)
+                b.should(s -> s.matchPhrase(mp -> mp.field("malwareName").query(phraseValue).boost(2.5f)));
+                b.should(s -> s.term(t -> t.field("malwareName").value(phraseValue).boost(3.0f)));
+                b.should(s -> s.term(t -> t.field("malwareName").value(lowered).boost(3.0f)));
+
+                // 6) Description (phrase only)
+                b.should(s -> s.matchPhrase(mp -> mp.field("behaviorDescription").query(phraseValue).boost(1.5f)));
+
+                b.minimumShouldMatch("1");
+                return b;
+            })._toQuery();
+        }
+
+        // Normal mode: your existing logic (but use raw value)
         return BoolQuery.of(b -> {
             // 1) Analyst full name
-            b.should(s -> s.matchPhrase(mp -> mp.field("analystFullName").query(q).boost(3.0f)));
+            b.should(s -> s.matchPhrase(mp -> mp.field("analystFullName").query(raw).boost(3.0f)));
             b.should(s -> s.match(m -> m.field("analystFullName")
-                    .query(q)
+                    .query(raw)
                     .fuzziness(Fuzziness.ONE.asString())
                     .boost(2.0f)
             ));
 
             // 2) Hash
-            b.should(s -> s.term(t -> t.field("sampleHash").value(q).boost(5.0f)));
-            b.should(s -> s.term(t -> t.field("sampleHash").value(lowered).boost(5.0f)));
+            b.should(s -> s.term(t -> t.field("sampleHash").value(raw).boost(5.0f)));
+            b.should(s -> s.term(t -> t.field("sampleHash").value(raw.toLowerCase().trim()).boost(5.0f)));
 
             // 3) Threat classification
-            b.should(s -> s.term(t -> t.field("threatClassification").value(q).boost(4.0f)));
-            b.should(s -> s.term(t -> t.field("threatClassification").value(lowered).boost(4.0f)));
-            b.should(s -> s.match(m -> m.field("threatClassification").query(q).boost(1.5f)));
+            b.should(s -> s.term(t -> t.field("threatClassification").value(raw).boost(4.0f)));
+            b.should(s -> s.term(t -> t.field("threatClassification").value(raw.toLowerCase().trim()).boost(4.0f)));
+            b.should(s -> s.match(m -> m.field("threatClassification").query(raw).boost(1.5f)));
 
-            // 4) CERT/CSIRT organization name: match + phrase + (optional) exact term
-            b.should(s -> s.matchPhrase(mp -> mp.field("securityOrganization").query(q).boost(2.5f)));
+            // 4) Organization
+            b.should(s -> s.matchPhrase(mp -> mp.field("securityOrganization").query(raw).boost(2.5f)));
             b.should(s -> s.match(m -> m.field("securityOrganization")
-                    .query(q)
+                    .query(raw)
                     .fuzziness(Fuzziness.ONE.asString())
                     .boost(2.0f)
             ));
-            b.should(s -> s.term(t -> t.field("securityOrganization").value(q).boost(3.0f)));
-            b.should(s -> s.term(t -> t.field("securityOrganization").value(lowered).boost(3.0f)));
+            b.should(s -> s.term(t -> t.field("securityOrganization").value(raw).boost(3.0f)));
+            b.should(s -> s.term(t -> t.field("securityOrganization").value(raw.toLowerCase().trim()).boost(3.0f)));
 
-            // 5) Malware/threat name: match + phrase + (optional) exact term
-            b.should(s -> s.matchPhrase(mp -> mp.field("malwareName").query(q).boost(2.5f)));
+            // 5) Malware name
+            b.should(s -> s.matchPhrase(mp -> mp.field("malwareName").query(raw).boost(2.5f)));
             b.should(s -> s.match(m -> m.field("malwareName")
-                    .query(q)
+                    .query(raw)
                     .fuzziness(Fuzziness.ONE.asString())
                     .boost(2.0f)
             ));
-            b.should(s -> s.term(t -> t.field("malwareName").value(q).boost(3.0f)));
-            b.should(s -> s.term(t -> t.field("malwareName").value(lowered).boost(3.0f)));
+            b.should(s -> s.term(t -> t.field("malwareName").value(raw).boost(3.0f)));
+            b.should(s -> s.term(t -> t.field("malwareName").value(raw.toLowerCase().trim()).boost(3.0f)));
 
-            // 6) Full-text search in report description (PDF extracted text)
-            b.should(s -> s.match(m -> m.field("behaviorDescription").query(q).boost(1.0f)));
-            b.should(s -> s.matchPhrase(mp -> mp.field("behaviorDescription").query(q).boost(1.5f)));
+            // 6) Description
+            b.should(s -> s.match(m -> m.field("behaviorDescription").query(raw).boost(1.0f)));
+            b.should(s -> s.matchPhrase(mp -> mp.field("behaviorDescription").query(raw).boost(1.5f)));
 
             b.minimumShouldMatch("1");
             return b;

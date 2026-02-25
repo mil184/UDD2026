@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/search")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "http://localhost:4200")
 public class SearchController {
 
     private final SearchService searchService;
@@ -30,6 +31,7 @@ public class SearchController {
         return searchService.advancedSearch(advancedSearchQuery.keywords(), pageable);
     }
 
+    @CrossOrigin(origins = "http://localhost:4200")
     @GetMapping()
     public Page<MalwareAnalysisIndex> search(
             @RequestParam("q") String q,
