@@ -168,19 +168,24 @@ public class IndexingServiceImpl implements IndexingService {
             throw new IllegalArgumentException("fileName is required (server filename).");
         }
 
-        var indexDoc = MalwareAnalysisIndex.builder()
+        var builder = MalwareAnalysisIndex.builder()
                 .id(analysis.getFileName())
                 .fileName(analysis.getFileName())
                 .analystFullName(analysis.getAnalystFullName())
                 .securityOrganization(analysis.getSecurityOrganization())
                 .malwareName(analysis.getMalwareName())
-                .behaviorDescription(analysis.getBehaviorDescription())
                 .threatClassification(
                         analysis.getThreatClassification() != null ? analysis.getThreatClassification().name() : null
                 )
-                .sampleHash(analysis.getSampleHash())
-                .build();
+                .sampleHash(analysis.getSampleHash());
 
+        if ("SR".equals(detectLanguage(analysis.getBehaviorDescription()))) {
+            builder.behaviorDescriptionSr(analysis.getBehaviorDescription());
+        } else {
+            builder.behaviorDescriptionEn(analysis.getBehaviorDescription());
+        }
+
+        var indexDoc = builder.build();
         malwareAnalysisIndexRepository.save(indexDoc);
 
         return analysis;

@@ -256,7 +256,8 @@ public class SearchServiceImpl implements SearchService {
                 b.should(s -> s.term(t -> t.field("malwareName").value(lowered).boost(3.0f)));
 
                 // 6) Description (phrase only)
-                b.should(s -> s.matchPhrase(mp -> mp.field("behaviorDescription").query(phraseValue).boost(1.5f)));
+                b.should(s -> s.matchPhrase(mp -> mp.field("behaviorDescriptionSr").query(phraseValue).boost(1.5f)));
+                b.should(s -> s.matchPhrase(mp -> mp.field("behaviorDescriptionEn").query(phraseValue).boost(1.5f)));
 
                 b.minimumShouldMatch("1");
                 return b;
@@ -303,8 +304,10 @@ public class SearchServiceImpl implements SearchService {
             b.should(s -> s.term(t -> t.field("malwareName").value(raw.toLowerCase().trim()).boost(3.0f)));
 
             // 6) Description
-            b.should(s -> s.match(m -> m.field("behaviorDescription").query(raw).boost(1.0f)));
-            b.should(s -> s.matchPhrase(mp -> mp.field("behaviorDescription").query(raw).boost(1.5f)));
+            b.should(s -> s.match(m -> m.field("behaviorDescriptionSr").query(raw).boost(1.2f)));
+            b.should(s -> s.match(m -> m.field("behaviorDescriptionEn").query(raw).boost(1.0f)));
+            b.should(s -> s.matchPhrase(mp -> mp.field("behaviorDescriptionSr").query(raw).boost(1.5f)));
+            b.should(s -> s.matchPhrase(mp -> mp.field("behaviorDescriptionEn").query(raw).boost(1.5f)));
 
             b.minimumShouldMatch("1");
             return b;
